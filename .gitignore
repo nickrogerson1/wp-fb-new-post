@@ -1,0 +1,5 @@
+/target
+.env
+service_account.json
+*.txt
+social_assets/
