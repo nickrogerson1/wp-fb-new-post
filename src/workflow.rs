@@ -136,7 +136,7 @@ pub async fn process_one_topic(
 
     if seed_links.is_empty() {
         eprintln!(
-            "\x1b[31m[WARN] Row {}: no seed links found in column P (continuing)\x1b[0m",
+            "\x1b[31m[WARN] Row {}: no seed links found (continuing)\x1b[0m",
             sheet_row
         );
     }

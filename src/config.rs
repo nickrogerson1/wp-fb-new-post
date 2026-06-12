@@ -33,3 +33,38 @@ pub fn desired_image_url_limit() -> usize {
         .filter(|n| *n > 0)
         .unwrap_or(5) // default to 5 if env var missing/invalid
 }
+
+#[derive(Debug, Clone)]
+pub struct SheetLayout {
+    /// Topic/prompt text column (a row is processed if this is filled in).
+    pub topic_column: String,
+    /// "Already processed" flag column; non-empty values skip the row.
+    pub processed_column: String,
+    /// Optional seed links column (one or more reference URLs).
+    pub seed_links_column: String,
+    /// First column of the 6-column social asset write-back block
+    /// (slug, title, tags, Facebook snippet, image URLs, model).
+    pub output_column: String,
+}
+
+pub fn load_sheet_layout() -> Result<SheetLayout, AppError> {
+    let topic_column = std::env::var("SHEET_TOPIC_COLUMN")
+        .map_err(|_| AppError::MissingEnv("SHEET_TOPIC_COLUMN".into()))?
+        .to_uppercase();
+    let processed_column = std::env::var("SHEET_PROCESSED_COLUMN")
+        .map_err(|_| AppError::MissingEnv("SHEET_PROCESSED_COLUMN".into()))?
+        .to_uppercase();
+    let seed_links_column = std::env::var("SHEET_SEED_LINKS_COLUMN")
+        .map_err(|_| AppError::MissingEnv("SHEET_SEED_LINKS_COLUMN".into()))?
+        .to_uppercase();
+    let output_column = std::env::var("SHEET_OUTPUT_COLUMN")
+        .map_err(|_| AppError::MissingEnv("SHEET_OUTPUT_COLUMN".into()))?
+        .to_uppercase();
+
+    Ok(SheetLayout {
+        topic_column,
+        processed_column,
+        seed_links_column,
+        output_column,
+    })
+}

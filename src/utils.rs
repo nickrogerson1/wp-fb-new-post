@@ -160,6 +160,31 @@ pub fn normalize_emdashes(input: &str) -> String {
 }
 
 
+/// Convert a spreadsheet column letter (e.g. "A", "F", "AA") into a
+/// 0-based column index (e.g. 0, 5, 26).
+pub fn column_letter_to_index(column: &str) -> i64 {
+    column
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .fold(0i64, |acc, c| {
+            acc * 26 + (c.to_ascii_uppercase() as i64 - 'A' as i64 + 1)
+        })
+        - 1
+}
+
+/// Convert a 0-based column index (e.g. 0, 5, 26) into a spreadsheet
+/// column letter (e.g. "A", "F", "AA").
+pub fn column_index_to_letter(index: i64) -> String {
+    let mut n = index + 1;
+    let mut letters = Vec::new();
+    while n > 0 {
+        let rem = ((n - 1) % 26) as u8;
+        letters.push((b'A' + rem) as char);
+        n = (n - 1) / 26;
+    }
+    letters.into_iter().rev().collect()
+}
+
 pub fn parse_seed_links(cell: &str) -> Vec<String> {
     use url::Url;
 

@@ -12,9 +12,9 @@ provider can be swapped with a CLI flag):
 
 1. **Research & draft** — generates a full draft article (title, excerpt, HTML
    content, tags, slug) along with a list of source references, using the
-   model's web-research/browsing capability. Seed links from the sheet (column
-   P) are passed in as a starting point. An `--news` flag switches to a
-   news-style prompt for time-sensitive topics.
+   model's web-research/browsing capability. Seed links from the sheet (the
+   configurable seed-links column) are passed in as a starting point. An
+   `--news` flag switches to a news-style prompt for time-sensitive topics.
 2. **Linkify** — rewrites the draft, turning the cited sources into inline
    links within the article body.
 3. **Social assets** — generates a Facebook post snippet and a list of
@@ -33,13 +33,17 @@ pushed back into the Google Sheet, and a token-usage/cost summary is printed.
 
 ## Google Sheet layout
 
-- **Column F** — the topic/prompt text (a row is processed if this is filled
-  in).
-- **Column K** — "already processed" flag; non-empty values skip the row.
-- **Column P** — optional seed links (one or more reference URLs) to ground
-  the research step.
-- Social asset columns (slug, tags, Facebook snippet, image URLs, etc.) are
-  written back after processing.
+The sheet column layout is configurable via `.env` (see Setup below):
+
+- **`SHEET_TOPIC_COLUMN`** — the topic/prompt text (a row is processed if this
+  is filled in).
+- **`SHEET_PROCESSED_COLUMN`** — "already processed" flag; non-empty values
+  skip the row.
+- **`SHEET_SEED_LINKS_COLUMN`** — optional seed links (one or more reference
+  URLs) to ground the research step.
+- **`SHEET_OUTPUT_COLUMN`** — first column of the social asset write-back
+  block (slug, title, tags, Facebook snippet, image URLs, model), written
+  after processing.
 
 ## CLI options
 
@@ -69,6 +73,12 @@ GEMINI_API_KEY=...
 GOOGLE_SHEET_ID=your-spreadsheet-id
 GOOGLE_SHEET_TAB=Sheet1
 GOOGLE_APPLICATION_CREDENTIALS=service_account.json
+
+# Google Sheet column layout (see "Google Sheet layout" above)
+SHEET_TOPIC_COLUMN=F
+SHEET_PROCESSED_COLUMN=K
+SHEET_SEED_LINKS_COLUMN=P
+SHEET_OUTPUT_COLUMN=J
 
 # Target WordPress site
 KYI_WP_URL=https://your-site.example.com

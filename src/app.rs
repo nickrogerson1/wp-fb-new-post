@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     cli::{Cli, Provider as CliProvider},
-    config::load_site_config,
+    config::{load_site_config, load_sheet_layout, SheetLayout},
     errors::AppError,
     google::sheets::{load_topics_from_sheet, update_social_assets_in_google_sheet},
     models::{SocialAssetRow, UsageTotals, SheetTopic},
@@ -72,11 +72,13 @@ pub async fn run() -> Result<(), AppError> {
 
     let sheet_name = std::env::var("GOOGLE_SHEET_TAB").unwrap_or_else(|_| "Sheet1".to_string());
 
-    let sheet_topics = load_topics_from_sheet(&client, &google_sheet_id, &sheet_name).await?;
+    let sheet_layout = load_sheet_layout()?;
+
+    let sheet_topics = load_topics_from_sheet(&client, &google_sheet_id, &sheet_name, &sheet_layout).await?;
     if sheet_topics.is_empty() {
         println!(
-            "No pending prompts found in column C of sheet '{}' ({}).",
-            sheet_name, google_sheet_id
+            "No pending prompts found in column {} of sheet '{}' ({}).",
+            sheet_layout.topic_column, sheet_name, google_sheet_id
         );
         return Ok(());
     }
@@ -124,7 +126,8 @@ pub async fn run() -> Result<(), AppError> {
         &social_rows,
         &usage_totals,
         args.provider,
-        &model
+        &model,
+        &sheet_layout
     )
     .await?;
 
@@ -300,6 +303,7 @@ async fn finalize_outputs(
     usage_totals: &Arc<UsageTotals>,
     provider: CliProvider,
     model_name: &str,
+    sheet_layout: &SheetLayout,
 ) -> Result<(), AppError> {
     let rows_snapshot = {
         let guard = social_rows.lock().await;
@@ -318,11 +322,12 @@ async fn finalize_outputs(
 
         if let Err(err) =
             update_social_assets_in_google_sheet(
-                client, 
-                sheet_id, 
-                sheet_name, 
+                client,
+                sheet_id,
+                sheet_name,
                 &rows_snapshot,
-                model_name
+                model_name,
+                sheet_layout
             ).await
         {
             eprintln!("Failed to update Google Sheet: {}", err);

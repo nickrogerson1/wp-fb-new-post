@@ -3,7 +3,8 @@ use url::form_urlencoded;
 use crate::{
     google::auth::google_token_provider,
     errors::AppError,
-    utils::{collapse_whitespace, truncate},
+    config::SheetLayout,
+    utils::{collapse_whitespace, truncate, column_letter_to_index, column_index_to_letter},
     models::SheetTopic,
     models::SocialAssetRow,
     models::GoogleValuesResponse
@@ -13,6 +14,7 @@ pub async fn load_topics_from_sheet(
     http_client: &Client,
     spreadsheet_id: &str,
     sheet_name: &str,
+    layout: &SheetLayout,
 ) -> Result<Vec<SheetTopic>, AppError> {
     let provider = google_token_provider().await?;
     let token = provider
@@ -20,13 +22,25 @@ pub async fn load_topics_from_sheet(
         .await
         .map_err(|e| AppError::GoogleAuth(format!("token fetch failed: {e}")))?;
 
-    // Topic is in column F.
-    // "already processed" flag is in column K.
-    // Seed links are in column P.
-    //
-    // Range F2:P means:
-    // F=0 G=1 H=2 I=3 J=4 K=5 L=6 M=7 N=8 O=9 P=10
-    let range = sheet_range(sheet_name, "F2:P");
+    // Topic, "already processed" flag, and seed links columns are configurable
+    // via SHEET_TOPIC_COLUMN / SHEET_PROCESSED_COLUMN / SHEET_SEED_LINKS_COLUMN.
+    // Read the smallest range that spans all three, then work out each
+    // column's offset within that range.
+    let topic_idx = column_letter_to_index(&layout.topic_column);
+    let processed_idx = column_letter_to_index(&layout.processed_column);
+    let seed_links_idx = column_letter_to_index(&layout.seed_links_column);
+
+    let min_idx = topic_idx.min(processed_idx).min(seed_links_idx);
+    let max_idx = topic_idx.max(processed_idx).max(seed_links_idx);
+
+    let start_col = column_index_to_letter(min_idx);
+    let end_col = column_index_to_letter(max_idx);
+
+    let topic_offset = (topic_idx - min_idx) as usize;
+    let processed_offset = (processed_idx - min_idx) as usize;
+    let seed_links_offset = (seed_links_idx - min_idx) as usize;
+
+    let range = sheet_range(sheet_name, &format!("{start_col}2:{end_col}"));
     let encoded_range: String = form_urlencoded::byte_serialize(range.as_bytes()).collect();
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}?majorDimension=ROWS",
@@ -66,21 +80,21 @@ pub async fn load_topics_from_sheet(
 
     let mut topics = Vec::new();
     for (idx, row) in parsed.values.unwrap_or_default().into_iter().enumerate() {
-        let topic_raw = row.get(0).map(|s| s.as_str()).unwrap_or("");
+        let topic_raw = row.get(topic_offset).map(|s| s.as_str()).unwrap_or("");
         let topic = collapse_whitespace(topic_raw);
         let topic = topic.trim();
         if topic.is_empty() {
             continue;
         }
 
-        // Column K (index 5 within F–P) indicates if we should skip this row.
-        let processed_flag = row.get(5).map(|s| s.trim()).unwrap_or("");
+        // The "already processed" flag indicates if we should skip this row.
+        let processed_flag = row.get(processed_offset).map(|s| s.trim()).unwrap_or("");
         if !processed_flag.is_empty() {
             continue;
         }
 
-        // Column P (index 10 within F–P) contains seed links (optional).
-        let links_cell = row.get(10).map(|s| s.trim()).unwrap_or("");
+        // Seed links column (optional).
+        let links_cell = row.get(seed_links_offset).map(|s| s.trim()).unwrap_or("");
         let seed_links = crate::utils::parse_seed_links(links_cell);
 
         topics.push(SheetTopic {
@@ -108,6 +122,7 @@ pub async fn update_social_assets_in_google_sheet(
     sheet_name: &str,
     rows: &[SocialAssetRow],
     model_name: &str,
+    layout: &SheetLayout,
 ) -> Result<(), AppError> {
     if rows.is_empty() {
         return Ok(());
@@ -118,6 +133,9 @@ pub async fn update_social_assets_in_google_sheet(
         .token(&["https://www.googleapis.com/auth/spreadsheets"])
         .await
         .map_err(|e| AppError::GoogleAuth(format!("token fetch failed: {e}")))?;
+
+    let output_start_idx = column_letter_to_index(&layout.output_column);
+    let output_end_col = column_index_to_letter(output_start_idx + 5);
 
     let mut data = Vec::with_capacity(rows.len() * 2);
 
@@ -131,24 +149,25 @@ pub async fn update_social_assets_in_google_sheet(
         let cleaned_topic = collapse_whitespace(&row.topic);
         let suggested_tags = row.suggested_tags.join(", ");
 
-        // Update the topic in column F.
+        // Update the topic in the topic column.
         data.push(serde_json::json!({
-            "range": sheet_range(sheet_name, &format!("F{}:F{}", row.sheet_row, row.sheet_row)),
+            "range": sheet_range(sheet_name, &format!("{col}{row}:{col}{row}", col = layout.topic_column, row = row.sheet_row)),
             "majorDimension": "ROWS",
             "values": [[cleaned_topic]]
         }));
 
-        // Update slug onward starting at column J (skipping new columns G, H, I).
+        // Update slug onward starting at the output column (a 6-column block:
+        // slug, title, tags, Facebook snippet, image URLs, model).
         data.push(serde_json::json!({
-            "range": sheet_range(sheet_name, &format!("J{}:O{}", row.sheet_row, row.sheet_row)),
+            "range": sheet_range(sheet_name, &format!("{start}{row}:{end}{row}", start = layout.output_column, end = output_end_col, row = row.sheet_row)),
             "majorDimension": "ROWS",
             "values": [[
-                row.slug.clone(),              // J
-                row.article_title.clone(),     // K
-                suggested_tags,                // L
-                row.facebook_snippet.clone(),  // M
-                image_cell,                    // N
-                model_name                     // O
+                row.slug.clone(),
+                row.article_title.clone(),
+                suggested_tags,
+                row.facebook_snippet.clone(),
+                image_cell,
+                model_name
             ]]
         }));
     }

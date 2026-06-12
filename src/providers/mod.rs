@@ -45,7 +45,7 @@ use crate::{
 #[async_trait]
 pub trait ContentProvider: Send + Sync {
     /// Initial drafting/research step.
-    /// - `seed_links` comes from sheet column P (may be empty).
+    /// - `seed_links` comes from the configured seed-links sheet column (may be empty).
     /// - `mode` switches between evergreen vs news prompt styles.
     async fn research_draft(
         &self,
